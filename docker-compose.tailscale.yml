@@ -1,0 +1,7 @@
+# Optional: also publish the UI on a Tailscale (or other private) interface.
+#   docker compose -f docker-compose.yml -f docker-compose.projects.yml -f docker-compose.tailscale.yml up -d
+# Set TAILSCALE_IP in .env. Never bind to 0.0.0.0 on an untrusted network.
+services:
+  webserver:
+    ports:
+      - "${TAILSCALE_IP:?set TAILSCALE_IP in .env}:8092:8080"

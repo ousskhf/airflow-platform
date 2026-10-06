@@ -1,0 +1,6 @@
+.env
+logs/*
+!logs/.gitkeep
+__pycache__/
+# local project mounts (copy from docker-compose.projects.example.yml)
+docker-compose.projects.yml

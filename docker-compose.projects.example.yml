@@ -1,0 +1,13 @@
+# One read-only mount per project, under /opt/airflow/dags/<project>.
+# Copy to docker-compose.projects.yml (gitignored) and edit, then run:
+#   docker compose -f docker-compose.yml -f docker-compose.projects.yml up -d --build
+# Add a project by adding one line to each of scheduler and webserver (both parse the DAGs).
+services:
+  scheduler:
+    volumes:
+      - ./examples/hello/dags:/opt/airflow/dags/hello:ro   # demo project, safe to remove
+      # - ${PROJECTS_DIR}/my-project/dags:/opt/airflow/dags/myproject:ro
+  webserver:
+    volumes:
+      - ./examples/hello/dags:/opt/airflow/dags/hello:ro
+      # - ${PROJECTS_DIR}/my-project/dags:/opt/airflow/dags/myproject:ro
