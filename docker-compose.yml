@@ -1,0 +1,81 @@
+# Shared Airflow for all projects. Web UI binds to 127.0.0.1 only (see docker-compose.tailscale.yml to add a private interface).
+# Projects plug in their dags/ folder through docker-compose.projects.yml (read-only mounts, copy of docker-compose.projects.example.yml).
+x-airflow: &airflow
+  build: .
+  image: airflow-platform:2.10.5
+  user: "${UID:-1000}:0"
+  group_add:
+    - "${DOCKER_GID:-994}"           # lets DockerOperator use /var/run/docker.sock
+  environment: &airflow-env
+    USER: airflow                    # host uid has no passwd entry in the image; Airflow needs a username
+    HOME: /home/airflow
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "False"
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:?set in .env}
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:?set in .env}
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${POSTGRES_PASSWORD:?set in .env}@postgres/airflow
+  volumes: &airflow-volumes
+    - ./dags:/opt/airflow/dags/platform
+    - ./logs:/opt/airflow/logs
+    - ./plugins:/opt/airflow/plugins
+    - /var/run/docker.sock:/var/run/docker.sock
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:                  # Airflow metadata only
+    image: postgres:16
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  airflow-init:
+    <<: *airflow
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - >
+        airflow db migrate &&
+        (airflow users create --username "$${AIRFLOW_ADMIN_USER}" --password "$${AIRFLOW_ADMIN_PASSWORD}"
+        --firstname admin --lastname admin --role Admin --email admin@example.test
+        || airflow users list | grep -qw "$${AIRFLOW_ADMIN_USER}")
+    environment:
+      <<: *airflow-env
+      AIRFLOW_ADMIN_USER: ${AIRFLOW_ADMIN_USER:-admin}
+      AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:?set in .env}
+    restart: "no"
+
+  scheduler:
+    <<: *airflow
+    command: scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  webserver:                 # http://localhost:8092
+    <<: *airflow
+    command: webserver
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8092:8080"
+    restart: unless-stopped
+
+volumes:
+  airflow-pgdata:
