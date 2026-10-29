@@ -1,0 +1,21 @@
+version: 2
+updates:
+  # Dockerfile base image (apache/airflow)
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      # Airflow major upgrades need a migration plan, not an automatic PR.
+      - dependency-name: apache/airflow
+        update-types: ["version-update:semver-major"]
+
+  # Images referenced in docker-compose.yml (postgres)
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      # A Postgres major bump cannot reuse the existing data volume.
+      - dependency-name: postgres
+        update-types: ["version-update:semver-major"]
